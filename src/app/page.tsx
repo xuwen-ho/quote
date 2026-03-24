@@ -153,6 +153,7 @@ export default function HomePage() {
             How it works
           </a>
           <button
+            onClick={() => router.push("/login")}
             className="px-4 py-2 rounded-full text-sm font-semibold transition-opacity hover:opacity-80"
             style={{ background: "var(--charcoal)", color: "white" }}
           >

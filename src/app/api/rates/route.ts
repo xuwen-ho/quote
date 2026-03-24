@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { getUserIdFromRequest } from "@/lib/auth";
+import { getUserId, getUserIdFromRequest } from "@/lib/auth";
 import type { RateOverrideInput } from "@/lib/types";
 
 function mergeRates(defaultRates: Awaited<ReturnType<typeof prisma.defaultRate.findMany>>, customRates: Awaited<ReturnType<typeof prisma.customRate.findMany>>) {
@@ -22,7 +22,7 @@ function mergeRates(defaultRates: Awaited<ReturnType<typeof prisma.defaultRate.f
 
 export async function GET(request: Request) {
   try {
-    const userId = getUserIdFromRequest(request);
+    const userId = (await getUserId()) ?? getUserIdFromRequest(request);
     const defaultRates = await prisma.defaultRate.findMany({
       orderBy: [{ category: "asc" }, { itemName: "asc" }],
     });
@@ -48,10 +48,10 @@ export async function GET(request: Request) {
 
 export async function PATCH(request: Request) {
   try {
-    const userId = getUserIdFromRequest(request);
+    const userId = (await getUserId()) ?? getUserIdFromRequest(request);
     if (!userId) {
       return Response.json(
-        { error: "Authentication required. Pass x-user-id header." },
+        { error: "Authentication required. Sign in to save custom rates." },
         { status: 401 }
       );
     }
