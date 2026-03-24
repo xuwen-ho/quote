@@ -123,6 +123,34 @@ export default function AnalyzePage() {
     ));
   };
 
+  const handleAreaChange = (id: string, newAreaSqft: number) => {
+    setRows((prev) => prev.map((r) =>
+      r.id === id
+        ? { ...r, areaSqft: newAreaSqft, areaSqm: Number((newAreaSqft * 0.0929).toFixed(1)) }
+        : r
+    ));
+  };
+
+  const handleAddRoom = () => {
+    const nextIndex = rows.length;
+    const pos = SVG_POSITIONS[nextIndex] ?? SVG_POSITIONS[0];
+    const newRow: RoomRow = {
+      id: String(nextIndex + 1),
+      name: "Bedroom",
+      type: "bedroom",
+      displayType: "Bedroom",
+      areaSqft: 120,
+      areaSqm: Number((120 * 0.0929).toFixed(1)),
+      svgX: pos.x, svgY: pos.y, svgW: pos.w, svgH: pos.h,
+    };
+    setRows((prev) => [...prev, newRow]);
+    setVisible((prev) => [...prev, newRow.id]);
+  };
+
+  const handleRemoveRoom = (id: string) => {
+    setRows((prev) => prev.filter((r) => r.id !== id));
+  };
+
   const handleConfirm = async () => {
     setConfirmed(true);
     setGenerating(true);
@@ -376,7 +404,7 @@ export default function AnalyzePage() {
               {rows.map((r) => (
                 <div
                   key={r.id}
-                  className="flex items-center gap-3 px-3 py-2.5 rounded-xl"
+                  className="flex items-center gap-2 px-3 py-2.5 rounded-xl"
                   style={{ background: "rgba(245,240,232,0.85)" }}
                 >
                   <span
@@ -386,18 +414,37 @@ export default function AnalyzePage() {
                   <select
                     value={r.displayType}
                     onChange={(e) => handleTypeChange(r.id, e.target.value)}
-                    className="flex-1 text-sm font-medium bg-transparent border-none outline-none cursor-pointer"
+                    className="flex-1 text-sm font-medium bg-transparent border-none outline-none cursor-pointer min-w-0"
                     style={{ color: "var(--charcoal)" }}
                   >
                     {ROOM_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
                   </select>
-                  <span className="text-xs font-mono flex-shrink-0" style={{ color: "var(--stone)" }}>
-                    {r.areaSqm} m²
+                  <input
+                    type="number"
+                    value={r.areaSqft}
+                    onChange={(e) => handleAreaChange(r.id, Math.max(0, Number(e.target.value)))}
+                    className="w-16 text-xs font-mono text-right bg-transparent border-b outline-none"
+                    style={{ color: "var(--charcoal)", borderColor: "var(--cream-border)" }}
+                    min={0}
+                    step={10}
+                  />
+                  <span className="text-[10px] flex-shrink-0" style={{ color: "var(--stone)" }}>
+                    sqft
                   </span>
+                  <button
+                    onClick={() => handleRemoveRoom(r.id)}
+                    className="w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 hover:bg-black/5 transition-colors"
+                    title="Remove room"
+                  >
+                    <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                      <path d="M2 2L8 8M8 2L2 8" stroke="var(--stone)" strokeWidth="1.2" strokeLinecap="round" />
+                    </svg>
+                  </button>
                 </div>
               ))}
 
               <button
+                onClick={handleAddRoom}
                 className="w-full px-3 py-2.5 rounded-xl border border-dashed text-sm font-medium transition-colors hover:bg-black/[0.02]"
                 style={{ borderColor: "var(--cream-border)", color: "var(--stone)" }}
               >

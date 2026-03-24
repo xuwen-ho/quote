@@ -123,10 +123,24 @@ export default function QuotePage() {
   }, [rooms]);
 
   const handleExportPDF = async () => {
-    if (!quoteId) return;
     setExportLoading(true);
     try {
-      window.open(`/api/quotes/${quoteId}/pdf`, "_blank");
+      if (quoteId) {
+        window.open(`/api/quotes/${quoteId}/pdf`, "_blank");
+      } else {
+        // Generate PDF from in-memory summary (no auth required)
+        const res = await fetch("/api/quotes/pdf", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ summary }),
+        });
+        if (!res.ok) throw new Error("PDF generation failed");
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        window.open(url, "_blank");
+      }
+    } catch {
+      // silent fail
     } finally {
       setExportLoading(false);
     }
@@ -181,16 +195,16 @@ export default function QuotePage() {
 
           {/* Export PDF */}
           <button
-            onClick={quoteId ? handleExportPDF : undefined}
-            disabled={!quoteId || exportLoading}
+            onClick={handleExportPDF}
+            disabled={exportLoading}
             className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-sm font-semibold transition-opacity hover:opacity-80"
             style={{
               background: "var(--sage)",
               color: "white",
-              opacity: (!quoteId || exportLoading) ? 0.6 : 1,
-              cursor: quoteId ? "pointer" : "not-allowed",
+              opacity: exportLoading ? 0.6 : 1,
+              cursor: exportLoading ? "not-allowed" : "pointer",
             }}
-            title={!quoteId ? "PDF export requires a saved quote (sign in to save)" : "Export as PDF"}
+            title="Export as PDF"
           >
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
               <path d="M7 1v8M4.5 6.5L7 9l2.5-2.5" stroke="white" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
@@ -341,11 +355,6 @@ export default function QuotePage() {
           </span>
         </div>
 
-        {!quoteId && (
-          <p className="text-center text-xs mt-4" style={{ color: "var(--stone)" }}>
-            Sign in to save your quote and enable PDF export
-          </p>
-        )}
       </main>
 
       <RatesPanel
