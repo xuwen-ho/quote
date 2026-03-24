@@ -1,0 +1,107 @@
+Overall Feel of App:
+1. The Canvas: "Drafting Table" Warmth
+The background shouldn't be a blinding, stark digital white. It needs to feel like an actual workspace.
+
+The Paper: Use a warm off-white or light cream color for the floor. You could even introduce a very subtle, almost imperceptible grain or watercolor-paper texture to the background.
+
+The Grid: Instead of a harsh graph-paper grid, use a soft, light-grey dot grid. It provides scale without cluttering the screen.
+
+The Walls: Thick, crisp, dark charcoal or deep navy blue lines. They should feel authoritative and permanent, contrasting with the movable white blocks.
+
+2. The Furniture: "Matte Maquette"
+The furniture items need to feel like physical objects resting on top of the paper, just like your prototype.
+
+Materiality: Pure, matte white. They should look like they are made of architectural foam core, unpainted 3D-printed PLA, or smooth clay. Zero wood grains, fabrics, or reflective surfaces.
+
+Lighting and Shadows (Crucial): This is what sells the effect. The blocks need a soft, top-down diffused lighting model. They must cast distinct but soft drop shadows onto the 2D blueprint beneath them. This visual cue tells the user, "I am an object you can pick up."
+
+Simplicity: The 3D models should lack intricate details. A sofa is just a few rounded rectangular prisms joined together. A toilet is a simple cylinder and oval.
+
+3. The UI Overlay: "Architectural Minimal"
+The buttons and menus should frame the workspace without fighting it for attention.
+
+Color Palette: Keep the UI chrome very neutral (whites, light greys) so the focus remains on the blueprint. Use a single, calming accent color for active buttons or selections—a soft sage green (like in the mockup above) or a muted drafting-tape blue.
+
+Typography: A clean, geometric sans-serif font (like Inter, Roboto, or standard Apple/Google system fonts). It should mimic neat architectural hand-lettering: legible, unpretentious, and precise.
+
+Animations: Interactions should feel physical. When a user taps a piece of furniture, it could subtly "lift" (the drop shadow gets slightly larger/softer) to indicate it's ready to be moved.
+
+The Overall Feeling
+The goal is to evoke a sense of zen productivity. By removing color and texture from the furniture, the user is freed from aesthetic decision paralysis and can focus entirely on "Feng Shui"—how the room flows, where the command positions are, and whether they can actually walk past the bed without hitting their knees.
+
+The User Flow: Sarah's Studio Challenge
+Scenario: Sarah has just finished drawing the walls of her apartment. Now she needs to see if her current queen-sized bed and a new sectional sofa will actually fit without blocking the bathroom door.
+
+Phase 1: The Setup & Initial Placement
+Sarah opens the "Add Furniture" tab. She drags in a generic bed and a generic sofa.
+
+Pain Point: The generic furniture is the wrong size. Her bed is specifically 160cm wide, not the standard 140cm.
+
+Essential Feature 1: Precise Dimension Input (Not just sliders)
+
+Why: Sliders are great for quick visual adjustments, but terrible for accuracy. If I know my sofa is exactly 220cm, I need to type "220", not fiddle with a slider that jumps from 215 to 225.
+
+UI Implementation: Tap on the number next to the slider to open a number pad keyboard.
+
+Phase 2: The Arrangement & Alignment
+She moves the bed into the top right corner. She tries to place a nightstand next to it.
+
+Pain Point: It’s hard to get the nightstand exactly flush against the wall and exactly aligned with the head of the bed using just her finger on a touchscreen.
+
+Essential Feature 2: Snapping & Guides Toggle
+
+Why: Users get frustrated when things look slightly off-kilter.
+
+UI Implementation: A toggle icon (perhaps near the 3D view button) that turns on "Magnetic Snap." When active, furniture snaps to walls, corners, and aligns with adjacent furniture edges.
+
+Phase 3: The "Oops" Moment
+Sarah tries to rotate the sofa to face the TV, but her finger slips and she accidentally drags the sofa outside the room walls, and then flings it off the screen, deleting it.
+
+Pain Point: She just lost the item she spent time sizing correctly.
+
+Essential Feature 3: Undo / Redo (Crucial!)
+
+Why: Design is an iterative process of trial and error. Mistakes happen constantly. Without Undo, the app feels punishing.
+
+UI Implementation: Standard curved arrows on the top navigation bar.
+
+Phase 4: The "What If" Scenario (Mass Changes)
+Sarah looks at her layout. The bed near the door feels cramped. She decides: "I hate it. Let's try putting the bed where the desk is."
+
+Pain Point: She has placed 10 items (bed, nightstands, sofa sections, rug, TV, etc.). Manually tapping and deleting every single one to start over is tedious and annoying.
+
+Essential Feature 4: Clear All / Reset Furniture
+
+Why: Users rarely get the design right on the first try. They need a "nuclear option" to quickly wipe the slate clean of movable objects without deleting the walls/doors they worked hard to draw.
+
+UI Implementation: This shouldn't be too prominent so it isn't hit accidentally. It usually lives in a "More" menu (three dots icon in the top right) -> "Clear Furniture."
+
+Phase 5: Finalizing & Comparing
+She likes two different layouts. One with the bed by the window, one with the bed in the corner. She wants to show her partner both options.
+
+Pain Point: If she changes the layout now, she loses the previous one.
+
+Essential Feature 5: Versions / Save Copy
+
+Why: The ability to compare "Option A" vs "Option B" is vital for decision-making.
+
+UI Implementation: In the project menu, an option to "Duplicate Project" or "Save as New Version."
+
+Summary of Essential Buttons/Features Added to Your UI
+Here is how your current UI should be augmented based on that flow:
+
+Top Navigation Bar:
+
+Undo / Redo Arrows: (Top Left, near back arrow).
+
+Three-Dot Menu Menu ( Overflow): (Top Right). This should contain:
+
+Clear All Furniture: (With a confirmation pop-up: "Are you sure? This will remove all movable items.")
+
+Duplicate Project/Save Version.
+
+On-Canvas / Floating Tools:
+3.  Snapping Toggle: A magnet icon near the bottom right (above 3D view) to turn snapping on/off.
+
+Bottom Sheet (When an item is selected):
+4.  Text Input for Dimensions: The current sliders for Width/Depth should have editable text boxes next to them for precise numerical entry.

@@ -1,0 +1,26 @@
+Phase 1: The Hook (Instant Upload)
+The Interface: The ID lands on your site. There is no mandatory login wall or complex setup dashboard. There is just a massive, inviting upload area: "Drag & Drop Floor Plan to Generate Quote."
+
+Action: They drop the PDF or image.
+
+Phase 2: The "Wow" Moment (AI Validation)
+Visual Feedback: Instead of a loading spinner, show the AI working. The blueprint appears, and bounding boxes or color overlays start popping up in real-time, labeling "Living Room," "Kitchen," and calculating the square footage.
+
+Minor Interaction: You present a quick confirmation screen. "We found 2 Bedrooms, 1 Kitchen, and 2 Baths. Look good?" They can make quick dropdown edits here if the AI missed a hacking requirement, just as you planned.
+
+Phase 3: The Instant Reveal (Using the Default Database)
+The Magic Output: As soon as they confirm the rooms, the tool instantly generates a fully itemized, formatted quotation.
+
+How it works: Behind the scenes, your tool maps the detected dimensions to your default database of standard renovation costs and applies a standard placeholder margin (e.g., 10%).
+
+The Value Prop: The ID sees a complete, calculated $65,000 quote generated in seconds, proving the tool actually works.
+
+Phase 4: The "Unlock" (Customization & Margins)
+The Pivot: The ID sees the instant quote, but they immediately think, "Wait, my carpenter charges more than this," or "I want a 20% margin, not 10%."
+
+The Capture: When they click on a base price to edit it, or click a "Settings" gear to change the margin, this is when you introduce the database controls.
+
+User Action: A side-panel or modal opens: "Customize Your Rates & Margins." Here, they can tweak the global margin slider or override specific unit costs. If you are requiring accounts, this is also the perfect moment to say, "Create a free account to save these custom rates for your next project."
+
+Phase 5: Export
+Action: They export the clean, client-facing PDF.
