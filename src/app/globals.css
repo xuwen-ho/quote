@@ -1,8 +1,23 @@
 @import "tailwindcss";
 
+/* ─── Design System ──────────────────────────────────────────── */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --cream:        #F5F0E8;
+  --cream-dark:   #EDE8DC;
+  --cream-border: #DDD7CC;
+  --charcoal:     #1C2B3A;
+  --sage:         #7A9E7E;
+  --sage-dark:    #5E7D62;
+  --stone:        #8B8070;
+  --paper-white:  #FAFAF7;
+
+  --background: var(--cream);
+  --foreground: var(--charcoal);
+
+  --shadow-sm:   0 2px 8px rgba(28, 43, 58, 0.07);
+  --shadow-md:   0 4px 20px rgba(28, 43, 58, 0.10);
+  --shadow-lg:   0 8px 36px rgba(28, 43, 58, 0.14);
+  --shadow-lift: 0 10px 40px rgba(28, 43, 58, 0.20);
 }
 
 @theme inline {
@@ -12,15 +27,51 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/* ─── Base ───────────────────────────────────────────────────── */
+body {
+  background: var(--cream);
+  color: var(--charcoal);
+  font-family: var(--font-geist-sans), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+/* ─── Dot Grid ───────────────────────────────────────────────── */
+.dot-grid {
+  background-image: radial-gradient(circle, #C5B99A 1px, transparent 1px);
+  background-size: 24px 24px;
 }
+
+/* ─── Animations ─────────────────────────────────────────────── */
+@keyframes box-appear {
+  from { opacity: 0; transform: scale(0.82); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes slide-right {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.animate-box-appear { animation: box-appear 0.32s cubic-bezier(0.34, 1.2, 0.64, 1) both; }
+.animate-fade-up    { animation: fade-up 0.4s ease both; }
+.animate-fade-in    { animation: fade-in 0.3s ease both; }
+.animate-spin-slow  { animation: spin 1s linear infinite; }

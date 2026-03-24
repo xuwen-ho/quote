@@ -36,8 +36,9 @@ export async function POST(request: Request) {
 
     await mkdir(UPLOAD_DIR, { recursive: true });
 
-    const ext = file.name.split(".").pop() || "png";
-    const filename = `${randomUUID()}.${ext}`;
+    const ext = (file.name.split(".").pop() || "png").toLowerCase();
+    const safeExt = ext.replace(/[^a-z0-9]/g, "") || "png";
+    const filename = `${randomUUID()}.${safeExt}`;
     const filepath = join(UPLOAD_DIR, filename);
 
     const bytes = await file.arrayBuffer();

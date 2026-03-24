@@ -40,3 +40,22 @@ export interface QuotationSummary {
   marginAmount: number;
   grandTotal: number;
 }
+
+export interface GenerateQuoteRequest {
+  projectId?: string;
+  rooms: DetectedRoom[];
+  rates?: RateItem[];
+  margin?: number;
+}
+
+export interface GenerateQuoteResponse {
+  quoteId?: string;
+  summary: QuotationSummary;
+}
+
+export interface RateOverrideInput {
+  category: string;
+  itemName: string;
+  unitCost: number;
+  unit: string;
+}

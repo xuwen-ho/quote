@@ -3,7 +3,9 @@ import { readFile } from "fs/promises";
 import { join } from "path";
 import type { AnalysisResult } from "@/lib/types";
 
-const anthropic = new Anthropic();
+const anthropic = new Anthropic({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+});
 
 const ANALYSIS_PROMPT = `You are an expert architectural floor plan analyzer. Analyze this floor plan image and extract the following information for each room:
 
@@ -30,6 +32,13 @@ Be as accurate as possible with dimensions. If you cannot determine exact dimens
 
 export async function POST(request: Request) {
   try {
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return Response.json(
+        { error: "ANTHROPIC_API_KEY is not configured" },
+        { status: 500 }
+      );
+    }
+
     const body = await request.json();
     const { fileUrl } = body as { fileUrl?: string };
 
@@ -37,16 +46,41 @@ export async function POST(request: Request) {
       return Response.json({ error: "fileUrl is required" }, { status: 400 });
     }
 
+    if (!fileUrl.startsWith("/uploads/")) {
+      return Response.json(
+        { error: "fileUrl must point to /uploads/" },
+        { status: 400 }
+      );
+    }
+
     // Read the uploaded file
-    const filePath = join(process.cwd(), "public", fileUrl);
+    const relativePath = fileUrl.replace(/^\/+/, "");
+    const filePath = join(process.cwd(), "public", relativePath);
     const fileBuffer = await readFile(filePath);
     const base64 = fileBuffer.toString("base64");
 
-    // Determine media type
     const ext = fileUrl.split(".").pop()?.toLowerCase();
-    let mediaType: "image/png" | "image/jpeg" | "image/gif" | "image/webp" =
-      "image/png";
-    if (ext === "jpg" || ext === "jpeg") mediaType = "image/jpeg";
+    const contentBlock =
+      ext === "pdf"
+        ? {
+            type: "document" as const,
+            source: {
+              type: "base64" as const,
+              media_type: "application/pdf" as const,
+              data: base64,
+            },
+          }
+        : {
+            type: "image" as const,
+            source: {
+              type: "base64" as const,
+              media_type:
+                ext === "jpg" || ext === "jpeg"
+                  ? ("image/jpeg" as const)
+                  : ("image/png" as const),
+              data: base64,
+            },
+          };
 
     const message = await anthropic.messages.create({
       model: "claude-sonnet-4-6-20250514",
@@ -55,10 +89,7 @@ export async function POST(request: Request) {
         {
           role: "user",
           content: [
-            {
-              type: "image",
-              source: { type: "base64", media_type: mediaType, data: base64 },
-            },
+            contentBlock,
             { type: "text", text: ANALYSIS_PROMPT },
           ],
         },
@@ -66,8 +97,10 @@ export async function POST(request: Request) {
     });
 
     // Extract JSON from response
-    const responseText =
-      message.content[0].type === "text" ? message.content[0].text : "";
+    const responseText = message.content
+      .filter((block) => block.type === "text")
+      .map((block) => block.text)
+      .join("\n");
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
 
     if (!jsonMatch) {
