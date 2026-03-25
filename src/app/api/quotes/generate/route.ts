@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { buildQuotationSummary } from "@/lib/quotation";
-import type { GenerateQuoteRequest, GenerateQuoteResponse, RateItem } from "@/lib/types";
+import type { DetectedRoom, GenerateQuoteRequest, GenerateQuoteResponse, RateItem } from "@/lib/types";
 
 async function resolveRates(inputRates?: RateItem[]): Promise<RateItem[]> {
   if (Array.isArray(inputRates) && inputRates.length > 0) {
@@ -23,16 +23,37 @@ async function resolveRates(inputRates?: RateItem[]): Promise<RateItem[]> {
 export async function POST(request: Request) {
   try {
     const body = (await request.json()) as GenerateQuoteRequest;
-    if (!Array.isArray(body.rooms) || body.rooms.length === 0) {
+
+    // Load persisted rooms from project if none provided
+    let rooms = body.rooms;
+    if ((!Array.isArray(rooms) || rooms.length === 0) && body.projectId) {
+      const dbRooms = await prisma.room.findMany({
+        where: { projectId: body.projectId },
+        orderBy: { sortOrder: "asc" },
+      });
+      rooms = dbRooms.map((r): DetectedRoom => ({
+        id: r.id,
+        type: r.roomType ?? "other",
+        name: r.label,
+        areaSqft: r.areaSqft ?? 0,
+        dimensions: (r.dimensions as { width: number; length: number; unit: "ft" | "m" }) ?? {
+          width: 0,
+          length: 0,
+          unit: "ft",
+        },
+      }));
+    }
+
+    if (!Array.isArray(rooms) || rooms.length === 0) {
       return Response.json(
-        { error: "rooms array is required" },
+        { error: "rooms array is required (or provide projectId with persisted rooms)" },
         { status: 400 }
       );
     }
 
     const rates = await resolveRates(body.rates);
     const summary = buildQuotationSummary({
-      rooms: body.rooms,
+      rooms,
       rates,
       margin: body.margin,
     });
@@ -42,7 +63,7 @@ export async function POST(request: Request) {
       const quote = await prisma.quote.create({
         data: {
           projectId: body.projectId,
-          rooms: JSON.parse(JSON.stringify(body.rooms)),
+          rooms: JSON.parse(JSON.stringify(rooms)),
           rates: JSON.parse(JSON.stringify(rates)),
           margin: summary.margin,
           totalAmount: summary.grandTotal,

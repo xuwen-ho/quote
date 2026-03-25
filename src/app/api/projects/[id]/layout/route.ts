@@ -8,7 +8,7 @@ export async function GET(
   const { id } = await params;
   const project = await prisma.project.findUnique({
     where: { id },
-    select: { id: true, name: true, roomData: true },
+    select: { id: true, name: true, furnitureData: true },
   });
 
   if (!project) {
@@ -18,7 +18,7 @@ export async function GET(
   return NextResponse.json({
     projectId: project.id,
     name: project.name,
-    furniture: project.roomData,
+    furniture: project.furnitureData,
   });
 }
 
@@ -39,7 +39,7 @@ export async function PUT(
 
   const project = await prisma.project.update({
     where: { id },
-    data: { roomData: furniture },
+    data: { furnitureData: furniture },
     select: { id: true, name: true, updatedAt: true },
   });
 

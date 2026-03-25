@@ -52,7 +52,7 @@ export async function POST(
   // Also save as current layout
   await prisma.project.update({
     where: { id },
-    data: { roomData: furniture },
+    data: { furnitureData: furniture },
   });
 
   return NextResponse.json({

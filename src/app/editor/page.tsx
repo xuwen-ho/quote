@@ -21,6 +21,15 @@ interface FurnitureItem {
   widthCm: number;
   depthCm: number;
   rotation: number;  // 0 | 90 | 180 | 270
+  roomId?: string;
+}
+
+interface RoomRecord {
+  id: string;
+  label: string;
+  roomType: string | null;
+  boundingBox: { xMin: number; yMin: number; xMax: number; yMax: number } | null;
+  areaSqft: number | null;
 }
 
 type Tab = "furniture" | "room" | "materials" | "3d";
@@ -179,6 +188,7 @@ function EditorInner() {
   const [saveStatus, setSaveStatus]     = useState<string | null>(null);
   const [loaded, setLoaded]             = useState(false);
   const [dragging, setDragging]         = useState(false);
+  const [rooms, setRooms]               = useState<RoomRecord[]>([]);
 
   const dragRef = useRef<{
     id: string;
@@ -193,7 +203,7 @@ function EditorInner() {
 
   const selectedItem = furniture.find((f) => f.id === selected) ?? null;
 
-  /* ── Load saved layout from database ── */
+  /* ── Load saved layout and rooms from database ── */
   useEffect(() => {
     if (!projectId || loaded) return;
     fetch(`/api/projects/${projectId}/layout`)
@@ -208,6 +218,10 @@ function EditorInner() {
         setLoaded(true);
       })
       .catch(() => setLoaded(true));
+    fetch(`/api/projects/${projectId}/rooms`)
+      .then((r) => r.ok ? r.json() : [])
+      .then((data) => { if (Array.isArray(data)) setRooms(data); })
+      .catch(() => {});
   }, [projectId, loaded]);
 
   /* ── Auto-save debounced (2s after last change) ── */
@@ -362,6 +376,36 @@ function EditorInner() {
     commit(next);
     setSelected(next[next.length - 1].id);
     setShowCatalog(false);
+  };
+
+  /* ── Room assignment ── */
+  const assignRoom = (itemId: string, roomId: string | undefined) => {
+    commit(
+      furniture.map((f) =>
+        f.id === itemId ? { ...f, roomId } : f
+      )
+    );
+  };
+
+  const autoAssignRooms = () => {
+    if (rooms.length === 0) return;
+    const roomsWithBbox = rooms.filter((r) => r.boundingBox);
+    if (roomsWithBbox.length === 0) return;
+
+    const next = furniture.map((f) => {
+      // Center point of furniture in normalized canvas coords (0..1)
+      const cx = (f.x + f.w / 2) / CANVAS_W;
+      const cy = (f.y + f.h / 2) / CANVAS_H;
+
+      for (const room of roomsWithBbox) {
+        const bb = room.boundingBox!;
+        if (cx >= bb.xMin && cx <= bb.xMax && cy >= bb.yMin && cy <= bb.yMax) {
+          return { ...f, roomId: room.id };
+        }
+      }
+      return f;
+    });
+    commit(next);
   };
 
   /* ── Save as New Version ── */
@@ -923,6 +967,25 @@ function EditorInner() {
           })}
         </div>
 
+        {/* ── Room auto-assign bar (when room tab active + rooms exist) ── */}
+        {activeTab === "room" && rooms.length > 0 && !selectedItem && (
+          <div
+            className="px-4 pb-3 pt-2 border-t flex items-center gap-3"
+            style={{ borderColor: "rgba(255,255,255,0.07)" }}
+          >
+            <p className="flex-1 text-xs" style={{ color: "rgba(255,255,255,0.5)" }}>
+              {rooms.length} room{rooms.length !== 1 ? "s" : ""} detected
+            </p>
+            <button
+              onClick={(e) => { e.stopPropagation(); autoAssignRooms(); }}
+              className="px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors"
+              style={{ background: "var(--sage)", color: "white" }}
+            >
+              Auto-assign Furniture to Rooms
+            </button>
+          </div>
+        )}
+
         {/* ── Bottom sheet — selected item ── */}
         {selectedItem && (
           <div
@@ -966,6 +1029,36 @@ function EditorInner() {
                 </button>
               </div>
             </div>
+
+            {/* Room assignment dropdown */}
+            {rooms.length > 0 && (
+              <div className="flex items-center gap-3 mb-3">
+                <span
+                  className="text-xs font-medium w-9 flex-shrink-0"
+                  style={{ color: "rgba(255,255,255,0.5)" }}
+                >
+                  Room
+                </span>
+                <select
+                  value={selectedItem.roomId ?? ""}
+                  onChange={(e) => assignRoom(selectedItem.id, e.target.value || undefined)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="flex-1 text-xs font-medium rounded-lg px-2.5 py-1.5 outline-none"
+                  style={{
+                    background: "rgba(255,255,255,0.08)",
+                    color: "white",
+                    border: "none",
+                  }}
+                >
+                  <option value="" style={{ background: "#1C2B3A" }}>Unassigned</option>
+                  {rooms.map((r) => (
+                    <option key={r.id} value={r.id} style={{ background: "#1C2B3A" }}>
+                      {r.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Dimension sliders */}
             <div className="space-y-2.5">

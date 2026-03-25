@@ -7,6 +7,7 @@ export interface DetectedRoom {
   sourceModel?: string;
   polygon?: Array<{ x: number; y: number }>;
   bbox?: { x: number; y: number; width: number; height: number };
+  boundingBox?: { xMin: number; yMin: number; xMax: number; yMax: number };
   dimensions: {
     width: number;
     length: number;

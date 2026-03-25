@@ -3,6 +3,7 @@ import { GoogleAuth } from "google-auth-library";
 import { readFile } from "fs/promises";
 import { join } from "path";
 import type { AnalysisResult, DetectedRoom } from "@/lib/types";
+import { prisma } from "@/lib/prisma";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -390,7 +391,7 @@ async function analyzeLegacyWithClaude(fileBuffer: Buffer, mimeType: string): Pr
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as { fileUrl?: string };
+    const body = (await request.json()) as { fileUrl?: string; projectId?: string };
     if (!body.fileUrl) {
       return Response.json({ error: "fileUrl is required" }, { status: 400 });
     }
@@ -410,6 +411,26 @@ export async function POST(request: Request) {
         } else {
           throw error;
         }
+      }
+    }
+
+    // Persist rooms to DB if projectId provided
+    if (body.projectId) {
+      try {
+        await prisma.room.deleteMany({ where: { projectId: body.projectId } });
+        await prisma.room.createMany({
+          data: result.rooms.map((room, i) => ({
+            projectId: body.projectId!,
+            label: room.name,
+            roomType: room.type,
+            boundingBox: room.boundingBox ?? room.bbox ?? undefined,
+            areaSqft: room.areaSqft,
+            dimensions: room.dimensions ?? undefined,
+            sortOrder: i,
+          })),
+        });
+      } catch (e) {
+        console.error("Failed to persist rooms:", e);
       }
     }
 

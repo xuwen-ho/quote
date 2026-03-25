@@ -17,7 +17,7 @@ export async function POST(
       userId: source.userId,
       name: `${source.name} (Copy)`,
       floorPlanUrl: source.floorPlanUrl,
-      roomData: source.roomData ?? undefined,
+      furnitureData: source.furnitureData ?? undefined,
     },
   });
 
