@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import type { DetectedRoom, GenerateQuoteResponse } from "@/lib/types";
 
@@ -55,6 +55,8 @@ interface RoomRow {
   areaSqft: number;
   areaSqm: number;
   svgX: number; svgY: number; svgW: number; svgH: number;
+  polygon?: Array<{ x: number; y: number }>;
+  bbox?: { x: number; y: number; width: number; height: number };
 }
 
 function toRows(rooms: DetectedRoom[]): RoomRow[] {
@@ -73,9 +75,22 @@ function toRows(rooms: DetectedRoom[]): RoomRow[] {
       areaSqft: r.areaSqft,
       areaSqm,
       svgX: pos.x, svgY: pos.y, svgW: pos.w, svgH: pos.h,
+      polygon: r.polygon,
+      bbox: r.bbox,
     };
   });
 }
+
+type OverlayMetrics = {
+  width: number;
+  height: number;
+  renderWidth: number;
+  renderHeight: number;
+  offsetX: number;
+  offsetY: number;
+  naturalWidth: number;
+  naturalHeight: number;
+} | null;
 
 export default function AnalyzePage() {
   const router = useRouter();
@@ -84,6 +99,8 @@ export default function AnalyzePage() {
   const [visible, setVisible] = useState<string[]>([]);
   const [confirmed, setConfirmed] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const imageContainerRef = useRef<HTMLDivElement>(null);
+  const [overlayMetrics, setOverlayMetrics] = useState<OverlayMetrics>(null);
 
   /* Load from sessionStorage on mount */
   useEffect(() => {
@@ -112,6 +129,53 @@ export default function AnalyzePage() {
     );
     return () => timers.forEach(clearTimeout);
   }, [rows]);
+
+  const updateOverlayMetrics = (img?: HTMLImageElement | null) => {
+    if (!img || !imageContainerRef.current) return;
+    const container = imageContainerRef.current.getBoundingClientRect();
+    const naturalWidth = img.naturalWidth;
+    const naturalHeight = img.naturalHeight;
+    if (!container.width || !container.height || !naturalWidth || !naturalHeight) return;
+
+    const containerAspect = container.width / container.height;
+    const imageAspect = naturalWidth / naturalHeight;
+
+    let renderWidth = container.width;
+    let renderHeight = container.height;
+    let offsetX = 0;
+    let offsetY = 0;
+
+    if (containerAspect > imageAspect) {
+      renderHeight = container.height;
+      renderWidth = renderHeight * imageAspect;
+      offsetX = (container.width - renderWidth) / 2;
+    } else {
+      renderWidth = container.width;
+      renderHeight = renderWidth / imageAspect;
+      offsetY = (container.height - renderHeight) / 2;
+    }
+
+    setOverlayMetrics({
+      width: container.width,
+      height: container.height,
+      renderWidth,
+      renderHeight,
+      offsetX,
+      offsetY,
+      naturalWidth,
+      naturalHeight,
+    });
+  };
+
+  useEffect(() => {
+    const handleResize = () => {
+      const img = imageContainerRef.current?.querySelector("img");
+      if (img) updateOverlayMetrics(img);
+    };
+
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   const totalSqm = rows.reduce((s, r) => s + r.areaSqm, 0).toFixed(1);
 
@@ -249,14 +313,77 @@ export default function AnalyzePage() {
           >
             {fileUrl && (fileUrl.endsWith(".png") || fileUrl.endsWith(".jpg") || fileUrl.endsWith(".jpeg")) ? (
               /* Show actual uploaded image */
-              <div className="relative w-full h-full">
+              <div ref={imageContainerRef} className="relative w-full h-full">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={fileUrl}
                   alt="Floor plan"
                   className="w-full h-full object-contain"
                   style={{ background: "#FAF8F4" }}
+                  onLoad={(e) => updateOverlayMetrics(e.currentTarget)}
                 />
+                {overlayMetrics && (
+                  <svg
+                    className="absolute inset-0 pointer-events-none"
+                    viewBox={`0 0 ${overlayMetrics.width} ${overlayMetrics.height}`}
+                    preserveAspectRatio="none"
+                  >
+                    {rows.map((r) => {
+                      if (!visible.includes(r.id)) return null;
+                      const color = roomColor(r.type);
+
+                      const points =
+                        r.polygon?.map((point) => {
+                          const x =
+                            overlayMetrics.offsetX +
+                            (point.x / overlayMetrics.naturalWidth) * overlayMetrics.renderWidth;
+                          const y =
+                            overlayMetrics.offsetY +
+                            (point.y / overlayMetrics.naturalHeight) * overlayMetrics.renderHeight;
+                          return `${x},${y}`;
+                        }) ?? [];
+
+                      const hasPolygon = points.length >= 3;
+                      const bbox = r.bbox
+                        ? {
+                            x:
+                              overlayMetrics.offsetX +
+                              (r.bbox.x / overlayMetrics.naturalWidth) * overlayMetrics.renderWidth,
+                            y:
+                              overlayMetrics.offsetY +
+                              (r.bbox.y / overlayMetrics.naturalHeight) * overlayMetrics.renderHeight,
+                            width: (r.bbox.width / overlayMetrics.naturalWidth) * overlayMetrics.renderWidth,
+                            height: (r.bbox.height / overlayMetrics.naturalHeight) * overlayMetrics.renderHeight,
+                          }
+                        : null;
+
+                      return (
+                        <g key={`real-overlay-${r.id}`} className="animate-box-appear">
+                          {hasPolygon ? (
+                            <polygon
+                              points={points.join(" ")}
+                              fill={color.fill}
+                              stroke={color.stroke}
+                              strokeWidth="2"
+                            />
+                          ) : null}
+                          {bbox ? (
+                            <rect
+                              x={bbox.x}
+                              y={bbox.y}
+                              width={Math.max(0, bbox.width)}
+                              height={Math.max(0, bbox.height)}
+                              fill="none"
+                              stroke={color.stroke}
+                              strokeWidth="1.5"
+                              strokeDasharray="4,3"
+                            />
+                          ) : null}
+                        </g>
+                      );
+                    })}
+                  </svg>
+                )}
                 {/* Animated room labels overlay */}
                 <div className="absolute inset-0 flex flex-col items-end justify-start p-4 gap-2 pointer-events-none">
                   {rows.map((r) =>

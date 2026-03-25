@@ -1,7 +1,12 @@
 export interface DetectedRoom {
+  id?: string;
   type: string;
   name: string;
   areaSqft: number;
+  confidence?: number;
+  sourceModel?: string;
+  polygon?: Array<{ x: number; y: number }>;
+  bbox?: { x: number; y: number; width: number; height: number };
   dimensions: {
     width: number;
     length: number;
