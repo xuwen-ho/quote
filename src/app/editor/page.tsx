@@ -5,9 +5,10 @@ import {
   useRef,
   useCallback,
   useEffect,
+  Suspense,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 /* ── Types ── */
 interface FurnitureItem {
@@ -74,8 +75,93 @@ const INITIAL: FurnitureItem[] = [
 const CANVAS_W = 262;
 const CANVAS_H = 422;
 
+/* ── Wall edges for snap alignment ── */
+const WALL_LEFT   = 8;
+const WALL_RIGHT  = 254;
+const WALL_TOP    = 8;
+const WALL_BOTTOM = 414;
+const WALL_H_DIV  = 150; // horizontal bathroom divider y
+const WALL_V_DIV  = 120; // vertical bathroom divider x
+
+const SNAP_THRESHOLD = 6; // px proximity to trigger snap
+
+function snapToEdges(
+  x: number, y: number, w: number, h: number,
+  others: FurnitureItem[], selfId: string
+): { x: number; y: number } {
+  let sx = x;
+  let sy = y;
+
+  // Collect wall snap targets (x-coordinates and y-coordinates)
+  const wallXs = [WALL_LEFT, WALL_RIGHT, WALL_V_DIV];
+  const wallYs = [WALL_TOP, WALL_BOTTOM, WALL_H_DIV];
+
+  // Check left/right edges against wall x-coordinates
+  let bestDx = SNAP_THRESHOLD + 1;
+  for (const wx of wallXs) {
+    const dLeft  = Math.abs(x - wx);
+    const dRight = Math.abs(x + w - wx);
+    if (dLeft < bestDx) { bestDx = dLeft;  sx = wx; }
+    if (dRight < bestDx) { bestDx = dRight; sx = wx - w; }
+  }
+
+  // Check top/bottom edges against wall y-coordinates
+  let bestDy = SNAP_THRESHOLD + 1;
+  for (const wy of wallYs) {
+    const dTop    = Math.abs(y - wy);
+    const dBottom = Math.abs(y + h - wy);
+    if (dTop < bestDy) { bestDy = dTop;    sy = wy; }
+    if (dBottom < bestDy) { bestDy = dBottom; sy = wy - h; }
+  }
+
+  // Check edges against other furniture
+  for (const o of others) {
+    if (o.id === selfId) continue;
+    const oRight  = o.x + o.w;
+    const oBottom = o.y + o.h;
+
+    // X-axis alignment
+    for (const [itemEdge, snapTo] of [
+      [x, o.x], [x, oRight], [x + w, o.x], [x + w, oRight],
+    ] as [number, number][]) {
+      const d = Math.abs(itemEdge - snapTo);
+      if (d < bestDx) {
+        bestDx = d;
+        sx = itemEdge === x ? snapTo : snapTo - w;
+      }
+    }
+
+    // Y-axis alignment
+    for (const [itemEdge, snapTo] of [
+      [y, o.y], [y, oBottom], [y + h, o.y], [y + h, oBottom],
+    ] as [number, number][]) {
+      const d = Math.abs(itemEdge - snapTo);
+      if (d < bestDy) {
+        bestDy = d;
+        sy = itemEdge === y ? snapTo : snapTo - h;
+      }
+    }
+  }
+
+  // If no edge snap found, fall back to grid snap
+  if (bestDx > SNAP_THRESHOLD) sx = Math.round(x / 10) * 10;
+  if (bestDy > SNAP_THRESHOLD) sy = Math.round(y / 10) * 10;
+
+  return { x: sx, y: sy };
+}
+
 export default function EditorPage() {
+  return (
+    <Suspense>
+      <EditorInner />
+    </Suspense>
+  );
+}
+
+function EditorInner() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const projectId = searchParams.get("projectId");
 
   const [furniture, setFurniture]       = useState<FurnitureItem[]>(INITIAL);
   const [selected, setSelected]         = useState<string | null>(null);
@@ -84,8 +170,15 @@ export default function EditorPage() {
   const [showMenu, setShowMenu]         = useState(false);
   const [showCatalog, setShowCatalog]   = useState(false);
   const [showClearDlg, setShowClearDlg] = useState(false);
+  const [showVersionDlg, setShowVersionDlg] = useState(false);
+  const [versionName, setVersionName]   = useState("");
   const [history, setHistory]           = useState<FurnitureItem[][]>([INITIAL]);
   const [histIdx, setHistIdx]           = useState(0);
+  const [projectName, setProjectName]   = useState("Studio Flat");
+  const [saving, setSaving]             = useState(false);
+  const [saveStatus, setSaveStatus]     = useState<string | null>(null);
+  const [loaded, setLoaded]             = useState(false);
+  const [dragging, setDragging]         = useState(false);
 
   const dragRef = useRef<{
     id: string;
@@ -96,8 +189,50 @@ export default function EditorPage() {
   } | null>(null);
 
   const canvasRef = useRef<HTMLDivElement>(null);
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const selectedItem = furniture.find((f) => f.id === selected) ?? null;
+
+  /* ── Load saved layout from database ── */
+  useEffect(() => {
+    if (!projectId || loaded) return;
+    fetch(`/api/projects/${projectId}/layout`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.furniture && Array.isArray(data.furniture) && data.furniture.length > 0) {
+          setFurniture(data.furniture);
+          setHistory([data.furniture]);
+          setHistIdx(0);
+        }
+        if (data?.name) setProjectName(data.name);
+        setLoaded(true);
+      })
+      .catch(() => setLoaded(true));
+  }, [projectId, loaded]);
+
+  /* ── Auto-save debounced (2s after last change) ── */
+  const autoSave = useCallback(
+    (items: FurnitureItem[]) => {
+      if (!projectId) return;
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = setTimeout(async () => {
+        setSaving(true);
+        try {
+          const res = await fetch(`/api/projects/${projectId}/layout`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ furniture: items }),
+          });
+          if (res.ok) {
+            setSaveStatus("Saved");
+            setTimeout(() => setSaveStatus(null), 2000);
+          }
+        } catch { /* silent */ }
+        setSaving(false);
+      }, 2000);
+    },
+    [projectId]
+  );
 
   /* ── History helpers ── */
   const commit = useCallback(
@@ -105,8 +240,9 @@ export default function EditorPage() {
       setHistory((h) => [...h.slice(0, histIdx + 1), next]);
       setHistIdx((i) => i + 1);
       setFurniture(next);
+      autoSave(next);
     },
-    [histIdx]
+    [histIdx, autoSave]
   );
 
   const undo = () => {
@@ -115,6 +251,7 @@ export default function EditorPage() {
       setHistIdx(ni);
       setFurniture(history[ni]);
       setSelected(null);
+      autoSave(history[ni]);
     }
   };
   const redo = () => {
@@ -122,6 +259,7 @@ export default function EditorPage() {
       const ni = histIdx + 1;
       setHistIdx(ni);
       setFurniture(history[ni]);
+      autoSave(history[ni]);
     }
   };
 
@@ -132,6 +270,7 @@ export default function EditorPage() {
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     const item = furniture.find((f) => f.id === id)!;
     setSelected(id);
+    setDragging(true);
     dragRef.current = {
       id,
       startX: e.clientX,
@@ -152,8 +291,9 @@ export default function EditorPage() {
           let nx = dragRef.current!.origX + dx;
           let ny = dragRef.current!.origY + dy;
           if (snap) {
-            nx = Math.round(nx / 10) * 10;
-            ny = Math.round(ny / 10) * 10;
+            const snapped = snapToEdges(nx, ny, f.w, f.h, prev, f.id);
+            nx = snapped.x;
+            ny = snapped.y;
           }
           return { ...f, x: nx, y: ny };
         })
@@ -164,12 +304,12 @@ export default function EditorPage() {
 
   const onPointerUp = useCallback(() => {
     if (dragRef.current) {
-      // commit to history after drag ends
       setFurniture((current) => {
         commit(current);
         return current;
       });
       dragRef.current = null;
+      setDragging(false);
     }
   }, [commit]);
 
@@ -224,6 +364,64 @@ export default function EditorPage() {
     setShowCatalog(false);
   };
 
+  /* ── Save as New Version ── */
+  const saveVersion = async () => {
+    if (!versionName.trim()) return;
+    const pid = projectId || await ensureProject();
+    if (!pid) return;
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/projects/${pid}/versions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: versionName.trim(), furniture }),
+      });
+      if (res.ok) {
+        setSaveStatus("Version saved");
+        setTimeout(() => setSaveStatus(null), 2000);
+      }
+    } catch { /* silent */ }
+    setSaving(false);
+    setShowVersionDlg(false);
+    setVersionName("");
+  };
+
+  /* ── Duplicate Project ── */
+  const duplicateProject = async () => {
+    const pid = projectId || await ensureProject();
+    if (!pid) return;
+    // Save current state first
+    await fetch(`/api/projects/${pid}/layout`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ furniture }),
+    });
+    const res = await fetch(`/api/projects/${pid}/duplicate`, { method: "POST" });
+    if (res.ok) {
+      const data = await res.json();
+      router.push(`/editor?projectId=${data.id}`);
+    }
+    setShowMenu(false);
+  };
+
+  /* ── Ensure project exists (create if needed) ── */
+  const ensureProject = async (): Promise<string | null> => {
+    try {
+      const res = await fetch("/api/projects", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: projectName, furniture }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        // Update URL without reload
+        window.history.replaceState({}, "", `/editor?projectId=${data.id}`);
+        return data.id;
+      }
+    } catch { /* silent */ }
+    return null;
+  };
+
   /* ─────────────────────────────────────────── render ── */
   return (
     <div
@@ -272,11 +470,34 @@ export default function EditorPage() {
         </button>
 
         <h1 className="flex-1 text-center text-sm font-semibold text-white">
-          Project: Studio Flat
+          Project: {projectName}
+          {saving && (
+            <span className="ml-2 text-[10px] font-normal" style={{ color: "rgba(255,255,255,0.4)" }}>
+              Saving...
+            </span>
+          )}
+          {saveStatus && !saving && (
+            <span className="ml-2 text-[10px] font-normal" style={{ color: "var(--sage)" }}>
+              {saveStatus}
+            </span>
+          )}
         </h1>
 
         {/* Share */}
-        <button className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors">
+        <button
+          onClick={async (e) => {
+            e.stopPropagation();
+            const url = window.location.href;
+            try {
+              await navigator.clipboard.writeText(url);
+              setSaveStatus("Link copied!");
+              setTimeout(() => setSaveStatus(null), 2000);
+            } catch {
+              /* fallback: do nothing */
+            }
+          }}
+          className="w-8 h-8 rounded-full flex items-center justify-center hover:bg-white/10 transition-colors"
+        >
           <svg width="15" height="15" viewBox="0 0 15 15" fill="none">
             <circle cx="11" cy="2.5" r="1.5" stroke="white" strokeWidth="1.2" />
             <circle cx="3.5" cy="7.5" r="1.5" stroke="white" strokeWidth="1.2" />
@@ -315,20 +536,33 @@ export default function EditorPage() {
                 Clear All Furniture
               </button>
               <div className="h-px mx-4" style={{ background: "#F0EBE3" }} />
-              {["Save as New Version", "Duplicate Project"].map((label) => (
-                <button
-                  key={label}
-                  className="w-full text-left px-4 py-3 text-sm flex items-center gap-2.5 hover:bg-black/4 transition-colors"
-                  style={{ color: "var(--charcoal)" }}
-                  onClick={() => setShowMenu(false)}
-                >
-                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                    <rect x="1.5" y="1.5" width="11" height="11" rx="1.5" stroke="var(--charcoal)" strokeWidth="1.2" />
-                    <path d="M5 7h4M7 5v4" stroke="var(--charcoal)" strokeWidth="1.2" strokeLinecap="round" />
-                  </svg>
-                  {label}
-                </button>
-              ))}
+              <button
+                onClick={() => {
+                  setShowMenu(false);
+                  setVersionName(`v${new Date().toLocaleDateString("en-GB")}`);
+                  setShowVersionDlg(true);
+                }}
+                className="w-full text-left px-4 py-3 text-sm flex items-center gap-2.5 hover:bg-black/4 transition-colors"
+                style={{ color: "var(--charcoal)" }}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <rect x="2" y="2" width="10" height="10" rx="1.5" stroke="var(--charcoal)" strokeWidth="1.2" />
+                  <path d="M4 2v3h6V2" stroke="var(--charcoal)" strokeWidth="1.2" strokeLinecap="round" />
+                  <rect x="5" y="7.5" width="4" height="2.5" rx="0.5" stroke="var(--charcoal)" strokeWidth="1" />
+                </svg>
+                Save as New Version
+              </button>
+              <button
+                onClick={duplicateProject}
+                className="w-full text-left px-4 py-3 text-sm flex items-center gap-2.5 hover:bg-black/4 transition-colors"
+                style={{ color: "var(--charcoal)" }}
+              >
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                  <rect x="3.5" y="3.5" width="9" height="9" rx="1.5" stroke="var(--charcoal)" strokeWidth="1.2" />
+                  <path d="M10.5 3.5V2.5a1 1 0 00-1-1H2.5a1 1 0 00-1 1v7a1 1 0 001 1h1" stroke="var(--charcoal)" strokeWidth="1.2" />
+                </svg>
+                Duplicate Project
+              </button>
             </div>
           )}
         </div>
@@ -396,6 +630,7 @@ export default function EditorPage() {
           {/* Draggable furniture items */}
           {furniture.map((item) => {
             const isSel = selected === item.id;
+            const isDraggingSel = isSel && dragging;
             return (
               <div
                 key={item.id}
@@ -407,7 +642,7 @@ export default function EditorPage() {
                   top:  item.y,
                   width:  item.w,
                   height: item.h,
-                  cursor: "grab",
+                  cursor: dragging ? "grabbing" : "grab",
                   zIndex: isSel ? 20 : 10,
                   touchAction: "none",
                 }}
@@ -422,11 +657,17 @@ export default function EditorPage() {
                     border: isSel
                       ? "2px solid var(--sage)"
                       : "1.5px solid rgba(200,195,185,.45)",
-                    boxShadow: isSel
-                      ? "0 10px 36px rgba(28,43,58,0.22), 0 2px 6px rgba(28,43,58,0.1)"
-                      : "0 3px 10px rgba(28,43,58,0.11), 0 1px 3px rgba(28,43,58,0.07)",
-                    transform: isSel ? "translateY(-2px)" : "none",
-                    transition: "box-shadow .14s ease, transform .14s ease",
+                    boxShadow: isDraggingSel
+                      ? "0 18px 48px rgba(28,43,58,0.28), 0 6px 16px rgba(28,43,58,0.12), 0 0 0 1px rgba(122,158,126,0.2)"
+                      : isSel
+                        ? "0 12px 40px rgba(28,43,58,0.24), 0 4px 12px rgba(28,43,58,0.10), 0 0 0 1px rgba(122,158,126,0.15)"
+                        : "0 3px 10px rgba(28,43,58,0.11), 0 1px 3px rgba(28,43,58,0.07)",
+                    transform: isDraggingSel
+                      ? "translateY(-4px) scale(1.02)"
+                      : isSel
+                        ? "translateY(-2px)"
+                        : "none",
+                    transition: dragging ? "none" : "box-shadow .18s ease, transform .18s ease, border .14s ease",
                     position: "relative",
                     overflow: "hidden",
                   }}
@@ -438,7 +679,7 @@ export default function EditorPage() {
                       inset: 5,
                       border: "1px solid rgba(200,195,185,.28)",
                       borderRadius: 3,
-                      background: "rgba(245,240,232,.28)",
+                      background: isSel ? "rgba(122,158,126,.06)" : "rgba(245,240,232,.28)",
                     }}
                   />
                   {/* Dimension label on selection */}
@@ -521,6 +762,55 @@ export default function EditorPage() {
                   style={{ background: "#C83232", color: "white" }}
                 >
                   Clear All
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Save Version dialog ── */}
+        {showVersionDlg && (
+          <div
+            className="absolute inset-0 z-50 flex items-center justify-center"
+            style={{ background: "rgba(28,43,58,0.5)", backdropFilter: "blur(4px)" }}
+            onClick={() => setShowVersionDlg(false)}
+          >
+            <div
+              className="rounded-2xl p-6 mx-6 max-w-sm w-full"
+              style={{ background: "white" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="text-base font-semibold mb-2" style={{ color: "var(--charcoal)" }}>
+                Save as New Version
+              </p>
+              <p className="text-sm mb-4" style={{ color: "var(--stone)" }}>
+                Create a named snapshot of the current layout.
+              </p>
+              <input
+                type="text"
+                value={versionName}
+                onChange={(e) => setVersionName(e.target.value)}
+                placeholder="Version name..."
+                className="w-full px-4 py-2.5 rounded-xl text-sm border mb-4 outline-none focus:ring-2 focus:ring-[var(--sage)]"
+                style={{ borderColor: "var(--cream-border)", color: "var(--charcoal)" }}
+                autoFocus
+                onKeyDown={(e) => e.key === "Enter" && saveVersion()}
+              />
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowVersionDlg(false)}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-medium border"
+                  style={{ borderColor: "var(--cream-border)", color: "var(--charcoal)" }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={saveVersion}
+                  disabled={!versionName.trim() || saving}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-semibold disabled:opacity-50"
+                  style={{ background: "var(--sage)", color: "white" }}
+                >
+                  {saving ? "Saving..." : "Save Version"}
                 </button>
               </div>
             </div>
