@@ -11,7 +11,7 @@ export async function POST(req: Request) {
     data: {
       userId: userId ?? undefined,
       name: name || "Untitled Project",
-      roomData: Array.isArray(furniture) ? furniture : undefined,
+      furnitureData: Array.isArray(furniture) ? furniture : undefined,
     },
   });
 
