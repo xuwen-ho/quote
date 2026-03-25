@@ -15,6 +15,9 @@ describe("POST /api/analyze", () => {
     vi.clearAllMocks();
     delete process.env.GEMINI_API_KEY;
     delete process.env.VERTEX_GEMINI_ENDPOINT;
+    delete process.env.SAM3_ENDPOINT;
+    delete process.env.SAM3_API_KEY;
+    delete process.env.SAM3_MODEL;
     delete process.env.ANALYZE_ALLOW_LEGACY_FALLBACK;
     process.env.ANALYZE_PIPELINE_MODE = "gemini_vertex";
   });
@@ -58,6 +61,24 @@ describe("POST /api/analyze", () => {
     expect(response.status).toBe(500);
     await expect(response.json()).resolves.toEqual({
       error: "GEMINI_API_KEY is required for GEMINI_AUTH_MODE=api_key",
+    });
+  });
+
+  it("returns 500 when SAM endpoint is not configured in sam_gemini mode", async () => {
+    process.env.ANALYZE_PIPELINE_MODE = "sam_gemini";
+    process.env.GEMINI_API_KEY = "test-key";
+    readFileMock.mockResolvedValue(Buffer.from([1, 2, 3]));
+
+    const response = await POST(
+      new Request("http://localhost/api/analyze", {
+        method: "POST",
+        body: JSON.stringify({ fileUrl: "/uploads/blueprint_sample1.png" }),
+      })
+    );
+
+    expect(response.status).toBe(500);
+    await expect(response.json()).resolves.toEqual({
+      error: "SAM3_ENDPOINT is required for ANALYZE_PIPELINE_MODE=sam_gemini",
     });
   });
 });
